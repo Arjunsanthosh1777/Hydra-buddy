@@ -166,6 +166,16 @@ npm run build
 NODE_ENV=production npm start
 ```
 
+### Deploying to Vercel
+HYDRABUDDY includes `vercel.json` and a dual-mode storage adapter (`src/services/clientStorageService.ts`):
+- **In Node.js / Full-Stack mode** (`npm run dev` or `npm start`), data persists in `hydrabuddy.db` via SQLite.
+- **On Vercel** (static Edge CDN deployment of `dist/`), the app automatically detects that no `/api` server is running and persists all water entries, daily goals, streaks, and unlocked achievements in browser `localStorage` with zero environment variables or external database setup required.
+
+To deploy to Vercel:
+1. Push the repository to GitHub (or run `npx vercel` directly from the project root).
+2. Import the project in Vercel — it automatically reads `vercel.json` (`buildCommand: "npm run build"`, `outputDirectory: "dist"`).
+3. Click **Deploy**.
+
 ---
 
 ## 9. Testing Instructions

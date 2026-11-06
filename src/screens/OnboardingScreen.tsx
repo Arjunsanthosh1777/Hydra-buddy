@@ -1,5 +1,6 @@
 import { ArrowLeft, ArrowRight, Bell, Check, Droplets, Target } from 'lucide-react';
 import { useState } from 'react';
+import heroImageSrc from '../assets/images/onboarding_hydration_hero_1793968625295.jpg';
 import {
   GOAL_PRESETS_ML,
   HYDRATION_LIMITS,
@@ -19,9 +20,6 @@ interface OnboardingScreenProps {
   ) => Promise<boolean>;
   saving?: boolean;
 }
-
-const HERO_IMAGE_SRC =
-  '/src/assets/images/onboarding_hydration_hero_1793968625295.jpg';
 
 export function OnboardingScreen({
   settings,
@@ -149,7 +147,7 @@ export function OnboardingScreen({
                     <span className="w-6 h-6 rounded-full bg-sky-50 text-sky-700 flex items-center justify-center shrink-0">
                       <Check className="w-3.5 h-3.5" aria-hidden="true" />
                     </span>
-                    <span>Persistent SQLite history, charts, and streak badges</span>
+                    <span>Persistent history, charts, and streak badges</span>
                   </li>
                   <li className="flex items-center gap-3">
                     <span className="w-6 h-6 rounded-full bg-sky-50 text-sky-700 flex items-center justify-center shrink-0">
@@ -175,7 +173,7 @@ export function OnboardingScreen({
             <div className="lg:col-span-6 bg-[#F4F9FD] min-h-[240px] lg:min-h-[420px] relative overflow-hidden">
               {!heroError ? (
                 <img
-                  src={HERO_IMAGE_SRC}
+                  src={heroImageSrc}
                   alt="Crystal glass carafe and tumbler filled with fresh water in morning sunlight"
                   referrerPolicy="no-referrer"
                   onError={() => setHeroError(true)}

@@ -1,11 +1,10 @@
 import { ArrowRight, Droplets } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import emblemImageSrc from '../assets/images/water_drop_emblem_1793968626259.jpg';
 
 interface SplashScreenProps {
   onFinish: () => void;
 }
-
-const EMBLEM_IMAGE_SRC = '/src/assets/images/water_drop_emblem_1793968626259.jpg';
 
 export function SplashScreen({ onFinish }: SplashScreenProps) {
   const [imageError, setImageError] = useState(false);
@@ -27,7 +26,7 @@ export function SplashScreen({ onFinish }: SplashScreenProps) {
         <div className="w-32 h-32 rounded-3xl bg-white border border-sky-950/8 shadow-md shadow-sky-950/5 overflow-hidden flex items-center justify-center p-2">
           {!imageError ? (
             <img
-              src={EMBLEM_IMAGE_SRC}
+              src={emblemImageSrc}
               alt="HydraBuddy crystal water droplet emblem"
               referrerPolicy="no-referrer"
               onError={() => setImageError(true)}

@@ -63,6 +63,7 @@ export default function App() {
 
   const {
     snapshot,
+    storageMode,
     loading,
     mutating,
     error,
@@ -344,6 +345,7 @@ export default function App() {
         {activeTab === 'settings' && (
           <SettingsScreen
             snapshot={snapshot}
+            storageMode={storageMode}
             mutating={mutating}
             notificationPermission={notificationPermission}
             onUpdateSettings={updateSettings}

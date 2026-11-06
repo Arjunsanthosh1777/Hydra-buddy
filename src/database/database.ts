@@ -1,11 +1,18 @@
 import { DatabaseSync } from 'node:sqlite';
+import os from 'node:os';
 import path from 'node:path';
 import { initializeDatabaseSchema } from './schema.ts';
 
 let dbInstance: DatabaseSync | null = null;
 
 export function getDatabasePath(): string {
-  return process.env.HYDRABUDDY_DB_PATH || path.resolve(process.cwd(), 'hydrabuddy.db');
+  if (process.env.HYDRABUDDY_DB_PATH) {
+    return process.env.HYDRABUDDY_DB_PATH;
+  }
+  if (process.env.VERCEL) {
+    return path.join(os.tmpdir(), 'hydrabuddy.db');
+  }
+  return path.resolve(process.cwd(), 'hydrabuddy.db');
 }
 
 export function getDatabase(): DatabaseSync {

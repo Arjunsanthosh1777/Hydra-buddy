@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getLocalDateKey } from '../constants/config.ts';
+import { clientStorageService } from '../services/clientStorageService.ts';
 import {
   getBrowserNotificationPermission,
   notificationScheduler,
@@ -13,8 +14,24 @@ import type {
   UserSettings,
 } from '../types/index.ts';
 
+export type StorageBackendMode = 'sqlite' | 'browser';
+
+async function checkApiBackendAvailable(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/health', { cache: 'no-store' });
+    if (!res.ok) return false;
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) return false;
+    const data = await res.json();
+    return Boolean(data && data.ok === true);
+  } catch {
+    return false;
+  }
+}
+
 export function useHydration() {
   const [snapshot, setSnapshot] = useState<HydrationSnapshot | null>(null);
+  const [storageMode, setStorageMode] = useState<StorageBackendMode>('sqlite');
   const [loading, setLoading] = useState<boolean>(true);
   const [mutating, setMutating] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +45,7 @@ export function useHydration() {
       getBrowserNotificationPermission()
     );
 
+  const storageModeRef = useRef<StorageBackendMode>('sqlite');
   const remainingMlRef = useRef<number>(2500);
   useEffect(() => {
     if (snapshot) {
@@ -55,19 +73,40 @@ export function useHydration() {
     try {
       setError(null);
       const todayKey = getLocalDateKey(new Date());
-      const res = await fetch(
-        `/api/hydration?date=${encodeURIComponent(todayKey)}`
-      );
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || 'Unable to load hydration data.');
+      const hasApi = await checkApiBackendAvailable();
+
+      if (hasApi) {
+        storageModeRef.current = 'sqlite';
+        setStorageMode('sqlite');
+        const res = await fetch(
+          `/api/hydration?date=${encodeURIComponent(todayKey)}`
+        );
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || 'Unable to load hydration data.');
+        }
+        const data = (await res.json()) as HydrationSnapshot;
+        setSnapshot(data);
+      } else {
+        storageModeRef.current = 'browser';
+        setStorageMode('browser');
+        const localData = clientStorageService.getSnapshot(todayKey);
+        setSnapshot(localData);
       }
-      const data = (await res.json()) as HydrationSnapshot;
-      setSnapshot(data);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Unable to connect to database.'
-      );
+      // Fallback gracefully to persistent browser storage if backend API is unreachable
+      try {
+        storageModeRef.current = 'browser';
+        setStorageMode('browser');
+        const localData = clientStorageService.getSnapshot(
+          getLocalDateKey(new Date())
+        );
+        setSnapshot(localData);
+      } catch {
+        setError(
+          err instanceof Error ? err.message : 'Unable to load hydration data.'
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -106,23 +145,36 @@ export function useHydration() {
         setMutating(true);
         setError(null);
         const todayKey = options?.localDateKey ?? getLocalDateKey(new Date());
-        const res = await fetch('/api/entries', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        const consumedIso = options?.consumedAtIso ?? new Date().toISOString();
+
+        let nextSnapshot: HydrationSnapshot;
+
+        if (storageModeRef.current === 'sqlite') {
+          const res = await fetch('/api/entries', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              amount_ml: amountMl,
+              consumed_at: consumedIso,
+              local_date: todayKey,
+              note: options?.note ?? null,
+            }),
+          });
+
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            throw new Error(payload.error || 'Failed to record water intake.');
+          }
+          nextSnapshot = payload.snapshot as HydrationSnapshot;
+        } else {
+          nextSnapshot = clientStorageService.addEntry({
             amount_ml: amountMl,
-            consumed_at: options?.consumedAtIso ?? new Date().toISOString(),
+            consumed_at: consumedIso,
             local_date: todayKey,
             note: options?.note ?? null,
-          }),
-        });
-
-        const payload = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(payload.error || 'Failed to record water intake.');
+          });
         }
 
-        const nextSnapshot = payload.snapshot as HydrationSnapshot;
         setSnapshot(nextSnapshot);
         showToast(`Logged +${amountMl.toLocaleString()} ml`);
 
@@ -151,15 +203,23 @@ export function useHydration() {
         setMutating(true);
         setError(null);
         const todayKey = getLocalDateKey(new Date());
-        const res = await fetch(
-          `/api/entries/${entryId}?date=${encodeURIComponent(todayKey)}`,
-          { method: 'DELETE' }
-        );
-        const payload = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(payload.error || 'Failed to delete entry.');
+
+        let nextSnapshot: HydrationSnapshot;
+        if (storageModeRef.current === 'sqlite') {
+          const res = await fetch(
+            `/api/entries/${entryId}?date=${encodeURIComponent(todayKey)}`,
+            { method: 'DELETE' }
+          );
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            throw new Error(payload.error || 'Failed to delete entry.');
+          }
+          nextSnapshot = payload.snapshot as HydrationSnapshot;
+        } else {
+          nextSnapshot = clientStorageService.deleteEntry(entryId, todayKey);
         }
-        setSnapshot(payload.snapshot as HydrationSnapshot);
+
+        setSnapshot(nextSnapshot);
         showToast('Entry removed');
         return true;
       } catch (err) {
@@ -183,19 +243,26 @@ export function useHydration() {
         setMutating(true);
         setError(null);
         const todayKey = getLocalDateKey(new Date());
-        const res = await fetch('/api/settings', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...patch,
-            local_date: todayKey,
-          }),
-        });
-        const payload = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(payload.error || 'Failed to save settings.');
+
+        let nextSnapshot: HydrationSnapshot;
+        if (storageModeRef.current === 'sqlite') {
+          const res = await fetch('/api/settings', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ...patch,
+              local_date: todayKey,
+            }),
+          });
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            throw new Error(payload.error || 'Failed to save settings.');
+          }
+          nextSnapshot = payload.snapshot as HydrationSnapshot;
+        } else {
+          nextSnapshot = clientStorageService.updateSettings(patch, todayKey);
         }
-        const nextSnapshot = payload.snapshot as HydrationSnapshot;
+
         setSnapshot(nextSnapshot);
         if (customToast) {
           showToast(customToast);
@@ -225,19 +292,30 @@ export function useHydration() {
         setMutating(true);
         setError(null);
         const todayKey = getLocalDateKey(new Date());
-        const res = await fetch('/api/reset', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+
+        let nextSnapshot: HydrationSnapshot;
+        if (storageModeRef.current === 'sqlite') {
+          const res = await fetch('/api/reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              resetSettings,
+              local_date: todayKey,
+            }),
+          });
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            throw new Error(payload.error || 'Failed to reset data.');
+          }
+          nextSnapshot = payload.snapshot as HydrationSnapshot;
+        } else {
+          nextSnapshot = clientStorageService.resetAllData(
             resetSettings,
-            local_date: todayKey,
-          }),
-        });
-        const payload = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(payload.error || 'Failed to reset data.');
+            todayKey
+          );
         }
-        setSnapshot(payload.snapshot as HydrationSnapshot);
+
+        setSnapshot(nextSnapshot);
         setUnlockedBanner([]);
         showToast(
           resetSettings
@@ -280,6 +358,7 @@ export function useHydration() {
 
   return {
     snapshot,
+    storageMode,
     loading,
     mutating,
     error,

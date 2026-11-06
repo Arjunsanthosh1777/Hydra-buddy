@@ -27,6 +27,7 @@ import type {
 
 interface SettingsScreenProps {
   snapshot: HydrationSnapshot;
+  storageMode: 'sqlite' | 'browser';
   mutating: boolean;
   notificationPermission: NotificationPermissionState;
   onUpdateSettings: (
@@ -41,6 +42,7 @@ interface SettingsScreenProps {
 
 export function SettingsScreen({
   snapshot,
+  storageMode,
   mutating,
   notificationPermission,
   onUpdateSettings,
@@ -515,7 +517,9 @@ export function SettingsScreen({
               <div className="py-2.5 flex items-center justify-between gap-2">
                 <span className="text-[#647D9B]">Storage Engine</span>
                 <span className="font-semibold text-[#0B1F3A]">
-                  SQLite Persistent Database
+                  {storageMode === 'sqlite'
+                    ? 'SQLite Persistent Database'
+                    : 'Browser Local Storage'}
                 </span>
               </div>
               <div className="py-2.5 flex items-center justify-between gap-2">
