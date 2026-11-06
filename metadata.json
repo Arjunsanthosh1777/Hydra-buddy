@@ -1,0 +1,6 @@
+{
+  "name": "HYDRABUDDY – Smart Water Intake Tracker",
+  "description": "Smart water intake tracker for daily hydration goals, intake history, statistics, streaks, achievement badges, and customizable reminders.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
